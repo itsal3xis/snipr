@@ -1,0 +1,16 @@
+# Enter all the information you know about the victim
+# For example, first name, last name, birth year, day, month, city, ...
+
+# Example input
+first_name: John
+last_name: Doe
+birth_year: 2000
+birth_day: 26
+birth_month: 05
+
+# Optional info
+city: Montreal
+company: JohnDoeInc
+hobby: football
+food: pizza
+pet: Snoopy
