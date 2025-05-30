@@ -39,13 +39,13 @@ def leetspeak(word):
     )
 
 def apply_case_variants(word):
-    return list(set([
-        word.lower(),
-        word.upper(),
-        word.capitalize(),
-        ''.join(c.upper() if i % 2 == 0 else c.lower() for i, c in enumerate(word)),
-        ''.join(c.lower() if i % 2 == 0 else c.upper() for i, c in enumerate(word))
-    ]))
+    variants = set()
+    variants.add(word.lower())
+    variants.add(word.upper())
+    variants.add(word.capitalize())
+    variants.add(''.join(c.upper() if i % 2 == 0 else c.lower() for i, c in enumerate(word)))
+    variants.add(''.join(c.lower() if i % 2 == 0 else c.upper() for i, c in enumerate(word)))
+    return variants
 
 def generate_variants(data, use_leet=True, combine_names=True, include_specials="!@#", prepend="", append="", separator="_", filter_keys=None):
     words = set()
@@ -55,7 +55,6 @@ def generate_variants(data, use_leet=True, combine_names=True, include_specials=
     def flatten(val):
         return val if isinstance(val, list) else [val]
 
-    # Filtered keys
     items = data.items()
     if filter_keys:
         filter_keys = [k.strip().lower() for k in filter_keys.split(',')]
@@ -69,26 +68,34 @@ def generate_variants(data, use_leet=True, combine_names=True, include_specials=
             else:
                 base_words.append(clean)
 
-    # Extend base words with leet and case variants
     extended_words = set()
     for word in base_words:
         extended_words.update(apply_case_variants(word))
         if use_leet:
-            extended_words.add(leetspeak(word))
-            extended_words.update(apply_case_variants(leetspeak(word)))
+            leet_word = leetspeak(word)
+            extended_words.add(leet_word)
+            extended_words.update(apply_case_variants(leet_word))
 
-    # Generate combinations and permutations up to 3 words
-    for r in range(1, 4):
+    all_combos = set()
+    for r in range(1, 5):
         for combo in itertools.permutations(extended_words, r):
-            joined = separator.join(combo)
-            words.add(prepend + joined + append)
-            for n in numbers:
-                words.add(prepend + joined + n + append)
-                for special in include_specials:
-                    words.add(prepend + joined + special + n + append)
-                    words.add(prepend + joined + n + special + append)
+            base = separator.join(combo)
+            all_combos.add(base)
 
-    return sorted(words)
+    final_words = set()
+    for combo in all_combos:
+        final_words.add(prepend + combo + append)
+        for number in numbers:
+            final_words.add(prepend + combo + number + append)
+            final_words.add(prepend + number + combo + append)
+            for special in include_specials:
+                final_words.add(prepend + combo + special + number + append)
+                final_words.add(prepend + number + combo + special + append)
+                final_words.add(prepend + special + combo + number + append)
+                final_words.add(prepend + combo + number + special + append)
+                final_words.add(prepend + number + special + combo + append)
+
+    return sorted(final_words)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -99,11 +106,11 @@ def main():
     parser.add_argument('--separator', type=str, default='_', help='Separator character')
     parser.add_argument('--prepend', type=str, default='', help='Prepend string')
     parser.add_argument('--append', type=str, default='', help='Append string')
-    parser.add_argument('-s', '--specials', type=str, default='!@#', help='Special characters to use')
+    parser.add_argument('--specials', type=str, default='!@#', help='Special characters to use')
     parser.add_argument('--filter-keys', type=str, help='Comma-separated keys to include')
     parser.add_argument('--shuffle', action='store_true', help='Shuffle wordlist')
     parser.add_argument('--stats', action='store_true', help='Print stats')
-    parser.add_argument('-j', '--json', type=str, help='Export wordlist to JSON')
+    parser.add_argument('--json', type=str, help='Export wordlist to JSON')
 
     args = parser.parse_args()
 
