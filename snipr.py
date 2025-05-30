@@ -109,6 +109,26 @@ def generate_variants(data, use_leet=True, combine_names=True, include_specials=
         combo3 = prepend + first_name.capitalize() + separator + last_name.capitalize() + append
         words.update({combo1, combo2, combo3})
 
+    # --- New random mixed variants like DJohn06 ---
+    if first_name and last_name and birth_year and len(birth_year) >= 2:
+        last_initial = last_name[0].upper()
+        year_suffix = birth_year[-2:]
+
+        variants = [
+            f"{last_initial}{first_name}{year_suffix}",
+            f"{first_name}{last_initial}{year_suffix}",
+            f"{last_initial}{year_suffix}{first_name}",
+            f"{year_suffix}{last_initial}{first_name}",
+            f"{year_suffix}{first_name}{last_initial}",
+        ]
+
+        for variant in variants:
+            words.add(prepend + variant + append)
+            words.add(prepend + variant.lower() + append)
+            words.add(prepend + variant.upper() + append)
+            if use_leet:
+                words.add(prepend + leetspeak(variant.lower()) + append)
+
     return sorted(words)
 
 def filter_length(words, min_len, max_len):
@@ -226,8 +246,6 @@ def main():
             if args.verbose_level >= 1:
                 print(f"[+] Wordlist saved to {output_file} ({len(wordlist)} passwords)")
 
-
-
     if args.stats:
         print("=== Statistics ===")
         print(f"Total passwords generated: {len(wordlist)}")
@@ -237,8 +255,6 @@ def main():
             print(f"Max length: {max(lengths)}")
             avg_len = sum(lengths)/len(lengths)
             print(f"Average length: {avg_len:.2f}")
-
-
 
 if __name__ == "__main__":
     main()
