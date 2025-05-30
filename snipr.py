@@ -238,41 +238,7 @@ def main():
             avg_len = sum(lengths)/len(lengths)
             print(f"Average length: {avg_len:.2f}")
 
-def install_man_page():
-    if platform.system() != "Linux":
-        return  # Only proceed on Linux
-
-    source_man_file = "man_snipr.1"  # assumes the man file is in the current directory
-    man_dir = "/usr/local/share/man/man1"
-    target_man_file = os.path.join(man_dir, "man_snipr.1")
-
-    if not os.path.isfile(source_man_file):
-        print(f"[!] Man file '{source_man_file}' not found in current directory. Skipping man page install.")
-        return
-
-    if not os.path.isdir(man_dir):
-        try:
-            os.makedirs(man_dir, exist_ok=True)
-        except PermissionError:
-            print(f"[!] Permission denied to create '{man_dir}'. Run the script as root or install man page manually.")
-            return
-
-    if not os.access(man_dir, os.W_OK):
-        print(f"[!] No write permission to '{man_dir}'.")
-        print(f"    To install man page manually, run:")
-        print(f"    sudo cp {os.path.abspath(source_man_file)} {target_man_file}")
-        print(f"    sudo mandb")
-        return
-
-    try:
-        shutil.copy2(source_man_file, target_man_file)
-        print(f"[+] Man page installed to {target_man_file}")
-        subprocess.run(["mandb"], check=False)
-        print("[+] Man database updated (mandb)")
-    except Exception as e:
-        print(f"[!] Failed to install man page: {e}")
 
 
 if __name__ == "__main__":
-    install_man_page()
     main()
