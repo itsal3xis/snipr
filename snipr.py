@@ -47,8 +47,9 @@ def generate_variants(words):
 def random_password_mix(variants_per_word, numbers, specials, separator_list, max_passwords, max_words=6):
     generated = set()
     attempts = 0
-    max_attempts = max_passwords * 20  # To avoid infinite loop
-
+    max_passwords = max_passwords
+    max_attempts = max_passwords * 10  # Limit attempts to avoid infinite loop
+    
     while len(generated) < max_passwords and attempts < max_attempts:
         attempts += 1
 
@@ -82,11 +83,26 @@ def random_password_mix(variants_per_word, numbers, specials, separator_list, ma
 
     return list(generated)
 
+def banner():
+    banner_text = """  ██████  ███▄    █  ██▓ ██▓███   ██▀███  
+▒██    ▒  ██ ▀█   █ ▓██▒▓██░  ██▒▓██ ▒ ██▒
+░ ▓██▄   ▓██  ▀█ ██▒▒██▒▓██░ ██▓▒▓██ ░▄█ ▒
+  ▒   ██▒▓██▒  ▐▌██▒░██░▒██▄█▓▒ ▒▒██▀▀█▄  
+▒██████▒▒▒██░   ▓██░░██░▒██▒ ░  ░░██▓ ▒██▒
+▒ ▒▓▒ ▒ ░░ ▒░   ▒ ▒ ░▓  ▒▓▒░ ░  ░░ ▒▓ ░▒▓░
+░ ░▒  ░ ░░ ░░   ░ ▒░ ▒ ░░▒ ░       ░▒ ░ ▒░
+░  ░  ░     ░   ░ ░  ▒ ░░░         ░░   ░ 
+      ░           ░  ░              ░     
+                                          """
+    print(f"\n\n{banner_text}\nBy itsal3xis\n=============================================\n")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', required=True)
     parser.add_argument('-o', '--output', default='wordlist.txt')
-    parser.add_argument('-n', '--num', type=int, default=10000, help='Number of passwords to generate')
+    parser.add_argument('-n', '--num', type=int, default=100000, help='Max number of passwords to generate')
+    parser.add_argument('-m', '--max-length', type=int, default=None, help='Maximum length of passwords')
     parser.add_argument('--seed', type=int, default=None)
     args = parser.parse_args()
 
@@ -116,13 +132,20 @@ def main():
 
     passwords = random_password_mix(variants_per_word, numbers, specials, separators, args.num)
 
+
     with open(args.output, 'w', encoding='utf-8') as f:
         for p in passwords:
-            f.write(p + '\n')
-
-    print(f"Generated {len(passwords)} passwords saved in {args.output}")
+            if args.max_length is None or len(p) <= args.max_length:
+                f.write(p + '\n') 
+    if args.max_length is not None:
+        banner()
+        print(f"Generated {len([p for p in passwords if len(p) <= args.max_length])} passwords with less than {args.max_length} characters\n")
+    else:
+        banner()
+        print(f"\nGenerated {len(passwords)} passwords saved in {args.output}")
 
 if __name__ == '__main__':
     start = time.time()
     main()
-    print(f"Execution took {time.time() - start:.2f} seconds")
+    end = time.time() - start
+    print(f"Execution took {end:.3f} seconds")
