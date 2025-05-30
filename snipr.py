@@ -109,26 +109,6 @@ def generate_variants(data, use_leet=True, combine_names=True, include_specials=
         combo3 = prepend + first_name.capitalize() + separator + last_name.capitalize() + append
         words.update({combo1, combo2, combo3})
 
-    # --- New random mixed variants like DJohn06 ---
-    if first_name and last_name and birth_year and len(birth_year) >= 2:
-        last_initial = last_name[0].upper()
-        year_suffix = birth_year[-2:]
-
-        variants = [
-            f"{last_initial}{first_name}{year_suffix}",
-            f"{first_name}{last_initial}{year_suffix}",
-            f"{last_initial}{year_suffix}{first_name}",
-            f"{year_suffix}{last_initial}{first_name}",
-            f"{year_suffix}{first_name}{last_initial}",
-        ]
-
-        for variant in variants:
-            words.add(prepend + variant + append)
-            words.add(prepend + variant.lower() + append)
-            words.add(prepend + variant.upper() + append)
-            if use_leet:
-                words.add(prepend + leetspeak(variant.lower()) + append)
-
     return sorted(words)
 
 def filter_length(words, min_len, max_len):
@@ -150,11 +130,24 @@ def remove_common_passwords(words, common_file):
     filtered = [w for w in words if w not in common]
     return filtered
 
+def combine_passwords(words, max_combinations=10000):
+    combined = set()
+    length = len(words)
+    max_pairs = min(length, int(max_combinations**0.5))
+    for i in range(max_pairs):
+        for j in range(max_pairs):
+            if i == j:
+                continue
+            combined.add(words[i] + words[j])
+            combined.add(words[i] + "_" + words[j])
+            if len(combined) >= max_combinations:
+                return list(combined)
+    return list(combined)
+
 class NoUsageArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         self._print_message(f"Error: {message}\n", sys.stderr)
         self.exit(2)
-
 
 def main():
     parser = NoUsageArgumentParser(description="Smart password wordlist generator.")
@@ -214,6 +207,11 @@ def main():
         if args.verbose_level >= 1:
             print(f"[+] Removed common passwords from {args.remove_common}")
 
+    wordlist = remove_duplicates(wordlist)
+
+    # Combine generated passwords to create new, longer passwords
+    combined_pairs = combine_passwords(wordlist, max_combinations=10000)
+    wordlist.extend(combined_pairs)
     wordlist = remove_duplicates(wordlist)
 
     if args.shuffle:
