@@ -1,0 +1,278 @@
+import argparse
+import random
+import json
+import os
+import platform
+import sys
+import shutil
+import subprocess
+
+def parse_input_file(file_path):
+    data = {}
+    with open(file_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue  # skip comments and blank lines
+            if ':' in line:
+                key, value = line.split(':', 1)
+                key = key.strip().lower()
+                value = value.strip()
+                if key in data:
+                    if isinstance(data[key], list):
+                        data[key].append(value)
+                    else:
+                        data[key] = [data[key], value]
+                else:
+                    data[key] = value
+    return data
+
+def leetspeak(word):
+    return (
+        word.replace('a', '@')
+            .replace('e', '3')
+            .replace('i', '1')
+            .replace('o', '0')
+            .replace('s', '$')
+    )
+
+def apply_case(word, case_option):
+    if case_option == 'lower':
+        return word.lower()
+    elif case_option == 'upper':
+        return word.upper()
+    elif case_option == 'capitalize':
+        return word.capitalize()
+    elif case_option == 'mixed':
+        # Randomize case for each letter
+        return ''.join(c.upper() if random.choice([True, False]) else c.lower() for c in word)
+    else:
+        return word
+
+def generate_variants(data, use_leet=True, combine_names=True, include_specials="!", prepend="", append="", separator="_", filter_keys=None):
+    words = set()
+    base = []
+
+    def flatten_value(val):
+        if isinstance(val, list):
+            return val
+        else:
+            return [val]
+
+    # Filter keys if specified
+    items = data.items()
+    if filter_keys:
+        filter_keys = [k.strip().lower() for k in filter_keys.split(',')]
+        items = [(k,v) for k,v in data.items() if k.lower() in filter_keys]
+
+    for key, val in items:
+        for v in flatten_value(val):
+            if v:
+                base.append(v.lower())
+                base.append(v.capitalize())
+                if use_leet and v.isalpha():
+                    base.append(leetspeak(v.lower()))
+
+    first_name = data.get('first_name', '')
+    last_name = data.get('last_name', '')
+    if isinstance(first_name, list):
+        first_name = first_name[0]
+    if isinstance(last_name, list):
+        last_name = last_name[0]
+
+    birth_year = data.get('birth_year', '')
+    birth_day = data.get('birth_day', '')
+    birth_month = data.get('birth_month', '')
+
+    if birth_year:
+        base.append(birth_year)
+    if birth_day and birth_month:
+        base.append(f"{birth_day}{birth_month}")
+    if birth_month and birth_year:
+        base.append(f"{birth_month}{birth_year}")
+
+    for w in base:
+        if not w: 
+            continue
+        w = w.strip()
+        words.add(prepend + w + append)
+        words.add(prepend + w + "123" + append)
+        words.add(prepend + w + "!" + append)
+        if birth_year:
+            words.add(prepend + w + birth_year + append)
+        if len(w) > 3:
+            words.add(prepend + w[:3] + "123" + append)
+
+    if combine_names and first_name and last_name:
+        combo1 = prepend + first_name + separator + last_name + append
+        combo2 = prepend + last_name + separator + first_name + append
+        combo3 = prepend + first_name.capitalize() + separator + last_name.capitalize() + append
+        words.update({combo1, combo2, combo3})
+
+    return sorted(words)
+
+def filter_length(words, min_len, max_len):
+    filtered = []
+    for w in words:
+        if (min_len is None or len(w) >= min_len) and (max_len is None or len(w) <= max_len):
+            filtered.append(w)
+    return filtered
+
+def remove_duplicates(words):
+    return sorted(set(words))
+
+def remove_common_passwords(words, common_file):
+    if not os.path.isfile(common_file):
+        print(f"[!] Common passwords file '{common_file}' not found. Skipping removal.")
+        return words
+    with open(common_file, 'r', encoding='utf-8', errors='ignore') as f:
+        common = set(line.strip() for line in f if line.strip())
+    filtered = [w for w in words if w not in common]
+    return filtered
+
+class NoUsageArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        self._print_message(f"Error: {message}\n", sys.stderr)
+        self.exit(2)
+
+
+def main():
+    parser = NoUsageArgumentParser(description="Smart password wordlist generator.")
+    parser.add_argument('-i', '--input', required=True, help='Input file path (default: input.txt)')
+    parser.add_argument('-o', '--output', default='wordlist.txt', help='Output wordlist file (default: wordlist.txt)')
+    parser.add_argument('-n', '--num', type=int, default=None, help='Max number of passwords to generate')
+    parser.add_argument('--no-leet', action='store_false', dest='use_leet', help='Disable leetspeak transformations')
+    parser.add_argument('--no-combine', action='store_false', dest='combine_names', help='Disable name combinations')
+    parser.add_argument('-a', '--append-to', type=str, help='Append to specified file instead of overwriting')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Print each password generated')
+    parser.add_argument('--min-length', type=int, default=None, help='Minimum length of passwords')
+    parser.add_argument('--max-length', type=int, default=None, help='Maximum length of passwords')
+    parser.add_argument('--include-specials', type=str, default="!", help='Special characters to append (default: "!")')
+    parser.add_argument('--prepend', type=str, default="", help='String to prepend to all generated passwords')
+    parser.add_argument('--append-str', type=str, default="", help='String to append to all generated passwords')
+    parser.add_argument('--separator', type=str, default="_", help='Separator used when combining names (default: "_")')
+    parser.add_argument('-f','--filter-keys', type=str, default=None, help='Comma-separated list of keys from input file to use')
+    parser.add_argument('-s', '--shuffle', action='store_true', help='Shuffle output wordlist')
+    parser.add_argument('-S', '--stats', action='store_true', help='Print statistics after generation')
+    parser.add_argument('--export-json', type=str, default=None, help='Export wordlist to JSON file instead of plain text')
+    parser.add_argument('-d', '--dry-run', action='store_true', help='Run generation but do not write output file')
+    parser.add_argument('--remove-common', type=str, default=None, help='File path to common passwords list to exclude')
+    parser.add_argument('--seed', type=int, default=None, help='Seed for randomization')
+    parser.add_argument('-V', '--verbose-level', type=int, choices=[0,1,2], default=1, help='Verbosity level (0=silent, 1=normal, 2=debug)')
+
+    args = parser.parse_args()
+
+    if args.seed is not None:
+        random.seed(args.seed)
+
+    if args.verbose_level >= 1:
+        print(f"[+] Reading input from {args.input}...")
+
+    data = parse_input_file(args.input)
+
+    if args.verbose_level >= 1:
+        print("[+] Generating wordlist...")
+
+    wordlist = generate_variants(
+        data,
+        use_leet=args.use_leet,
+        combine_names=args.combine_names,
+        include_specials=args.include_specials,
+        prepend=args.prepend,
+        append=args.append_str,
+        separator=args.separator,
+        filter_keys=args.filter_keys
+    )
+
+    if args.min_length or args.max_length:
+        wordlist = filter_length(wordlist, args.min_length, args.max_length)
+        if args.verbose_level >= 2:
+            print(f"[DEBUG] Filtered by length: {len(wordlist)} words remain")
+
+    if args.remove_common:
+        wordlist = remove_common_passwords(wordlist, args.remove_common)
+        if args.verbose_level >= 1:
+            print(f"[+] Removed common passwords from {args.remove_common}")
+
+    wordlist = remove_duplicates(wordlist)
+
+    if args.shuffle:
+        random.shuffle(wordlist)
+        if args.verbose_level >= 2:
+            print("[DEBUG] Shuffled the wordlist")
+
+    if args.num:
+        wordlist = wordlist[:args.num]
+
+    if args.dry_run:
+        if args.verbose_level >= 1:
+            print(f"[+] Dry run enabled. Would generate {len(wordlist)} passwords. Not writing to file.")
+    else:
+        output_file = args.append_to if args.append_to else args.output
+        mode = 'a' if args.append_to else 'w'
+
+        if args.export_json:
+            with open(args.export_json, mode) as f:
+                json.dump(wordlist, f, indent=2)
+            if args.verbose_level >= 1:
+                print(f"[+] Exported wordlist to JSON file {args.export_json}")
+        else:
+            with open(output_file, mode, encoding='utf-8') as f:
+                for word in wordlist:
+                    f.write(word + '\n')
+                if args.verbose_level == 2:
+                    print(f"[DEBUG] {word}")
+
+            if args.verbose_level >= 1:
+                print(f"[+] Wordlist saved to {output_file} ({len(wordlist)} passwords)")
+
+
+
+    if args.stats:
+        print("=== Statistics ===")
+        print(f"Total passwords generated: {len(wordlist)}")
+        lengths = [len(w) for w in wordlist]
+        if lengths:
+            print(f"Min length: {min(lengths)}")
+            print(f"Max length: {max(lengths)}")
+            avg_len = sum(lengths)/len(lengths)
+            print(f"Average length: {avg_len:.2f}")
+
+def install_man_page():
+    if platform.system() != "Linux":
+        return  # Only proceed on Linux
+
+    source_man_file = "man_snipr.1"  # assumes the man file is in the current directory
+    man_dir = "/usr/local/share/man/man1"
+    target_man_file = os.path.join(man_dir, "man_snipr.1")
+
+    if not os.path.isfile(source_man_file):
+        print(f"[!] Man file '{source_man_file}' not found in current directory. Skipping man page install.")
+        return
+
+    if not os.path.isdir(man_dir):
+        try:
+            os.makedirs(man_dir, exist_ok=True)
+        except PermissionError:
+            print(f"[!] Permission denied to create '{man_dir}'. Run the script as root or install man page manually.")
+            return
+
+    if not os.access(man_dir, os.W_OK):
+        print(f"[!] No write permission to '{man_dir}'.")
+        print(f"    To install man page manually, run:")
+        print(f"    sudo cp {os.path.abspath(source_man_file)} {target_man_file}")
+        print(f"    sudo mandb")
+        return
+
+    try:
+        shutil.copy2(source_man_file, target_man_file)
+        print(f"[+] Man page installed to {target_man_file}")
+        subprocess.run(["mandb"], check=False)
+        print("[+] Man database updated (mandb)")
+    except Exception as e:
+        print(f"[!] Failed to install man page: {e}")
+
+
+if __name__ == "__main__":
+    install_man_page()
+    main()
